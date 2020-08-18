@@ -60,10 +60,14 @@ THE SOFTWARE.
             return false;
     },
     _getCanvasLayer: function (el, overlay) {
-        this.layer++;
-        var canvas = $("<canvas style='position:absolute;z-Index:" + ((overlay ? 2000 : 1000) + this.layer) + "' width='" + this.options.pixelWidth + "' height='" + this.options.pixelHeight + "'></canvas>");
-        el.append(canvas);
-        return (canvas[0].getContext("2d"));
+        if(!this.canvasContext) {
+          this.layer++;
+          var canvas = $("<canvas id='canvas-subway-id-" + this.layer + "' style='position:absolute;z-Index:" + ((overlay ? 2000 : 1000) + this.layer) + "' width='" + this.options.pixelWidth + "' height='" + this.options.pixelHeight + "'></canvas>");
+          el.append(canvas);
+          this.canvasContext = (canvas[0].getContext("2d"));
+        }
+
+        return this.canvasContext;
     },
     _render: function (el) {
 
@@ -137,13 +141,13 @@ THE SOFTWARE.
                 var outline = $(ul).attr("data-outline");
                 if (outline != undefined && ((outline === true) || (outline.toLowerCase() == "true")))
                     outline = true;
-                else 
+                else
                     outline = false;
 
                 var dotted = $(ul).attr("data-dotted");
                 if (dotted != undefined && ((dotted === true) || (dotted.toLowerCase() == "true")))
                     dotted = true;
-                else 
+                else
                     dotted = false;
 
                 var lineTextClass = $(ul).attr("data-textClass");
@@ -209,33 +213,37 @@ THE SOFTWARE.
 
                 if (nodes.length > 0) {
                     self._drawLine(el, scale, rows, columns, color, (lineTextClass != "" ? lineTextClass : textClass), lineWidth, nodes, reverseMarkers, dotted);
-                    if (outline === true) 
+                    if (outline === true)
                         self._drawLine(el, scale, rows, columns, '#FFFFFF', false, lineWidth - 2, nodes, reverseMarkers, dotted);
                 }
-                    
+
                 $(ul).remove();
             });
+
+
+            //Porto in primo piano le stazioni!
+            self._updateStationsPositions();
 
             if ((lineLabels.length > 0) && (legendId != ""))
             {
                 var legend = $("#" + legendId);
 
                 for(var line=0; line<lineLabels.length; line++) {
-                 
+
                     // Prepare SVG param for dotted lines
                     var dottedSVGParam = "";
-                    if (lineLabels[line].dotted === true) 
+                    if (lineLabels[line].dotted === true)
                         dottedSVGParam = "stroke-dasharray='5, 5'";
 
                     // Create a SVG line
                     var lineSVG = "<line x1='0' y1='3' x2='100' y2='3' stroke-width='"+ (lineWidth + 2)  +"' stroke='" + lineLabels[line].color + "' "+ dottedSVGParam +" />";
-                    
+
                     // We create a second SVG white line to create the outline effect in the legend if required by the "outline" param
-                    if (lineLabels[line].outline === true) 
+                    if (lineLabels[line].outline === true)
                         lineSVG += "<line x1='0' y1='4' x2='100' y2='4' stroke-width='"+ ( (lineWidth + 2) / 2 ) +"' stroke='#FFFFFF' "+ dottedSVGParam +" />";
-                 
+
                     legend.append("<div><span style='float:left; display:bock;width:100px;height:" + lineWidth + "px;'><svg>" + lineSVG + "</svg></span>" + lineLabels[line].label + "</div>");
-                }  
+                }
             }
 
         }
@@ -243,8 +251,22 @@ THE SOFTWARE.
     _drawLine: function (el, scale, rows, columns, color, textClass, width, nodes, reverseMarkers, dotted) {
 
         var ctx = this._getCanvasLayer(el, false);
+        var stage = null;
+        if(this.stage) {
+          stage = this.stage;
+        } else {
+          this.stage = new createjs.Stage("canvas-subway-id-"+this.layer);
+          stage = this.stage;
+        }
+        //var stage = new createjs.Stage("canvas-subway-id-"+this.layer);
+        stage.enableMouseOver(20);
+        var line = new createjs.Shape();
+        stage.addChild(line);
+        line.graphics.setStrokeStyle(width);
+        var fillCommand = line.graphics.beginStroke(color).command;
+
         ctx.beginPath();
-        ctx.moveTo(nodes[0].x * scale, nodes[0].y * scale);
+        line.graphics.moveTo(nodes[0].x * scale, nodes[0].y * scale);
         var markers = [];
         var lineNodes = [];
         var node;
@@ -274,7 +296,7 @@ THE SOFTWARE.
                 var yDiff = Math.round(Math.abs(currNode.y - nextNode.y));
                 if ((xDiff == 0) || (yDiff == 0)) {
                     // Horizontal or Vertical
-                    ctx.lineTo((nextNode.x * scale) + xCorr, (nextNode.y * scale) + yCorr);
+                    line.graphics.lineTo((nextNode.x * scale) + xCorr, (nextNode.y * scale) + yCorr);
                 }
                 else if ((xDiff == 1) && (yDiff == 1)) {
                     // 90 degree turn
@@ -286,7 +308,7 @@ THE SOFTWARE.
                         case "w": xVal = -1 * scale; yVal = 0; break;
                         default: xVal = 0; yVal = -1 * scale; break;
                     }
-                    ctx.quadraticCurveTo((currNode.x * scale) + xVal, (currNode.y * scale) + yVal,
+                    line.graphics.quadraticCurveTo((currNode.x * scale) + xVal, (currNode.y * scale) + yVal,
                                                     (nextNode.x * scale) + xCorr, (nextNode.y * scale) + yCorr);
                 }
                 else if (xDiff == yDiff) {
@@ -312,36 +334,55 @@ THE SOFTWARE.
                     }
                     this._debug((currNode.x * scale) + xVal + ", " + (currNode.y * scale) + "; " + (nextNode.x + (dirVal * xDiff / 2)) * scale + ", " +
                     (nextNode.y + (yVal * xDiff / 2)) * scale);
-                    ctx.bezierCurveTo(
+                    line.graphics.bezierCurveTo(
                             (currNode.x * scale) + xVal, (currNode.y * scale),
                             (currNode.x * scale) + xVal, (currNode.y * scale),
                             (nextNode.x + (dirVal * xDiff / 2)) * scale, (nextNode.y + (yVal * xDiff / 2)) * scale);
-                    ctx.bezierCurveTo(
+                    line.graphics.bezierCurveTo(
                             (nextNode.x * scale) + (dirVal * scale / 2), (nextNode.y) * scale,
                             (nextNode.x * scale) + (dirVal * scale / 2), (nextNode.y) * scale,
                             nextNode.x * scale, nextNode.y * scale);
                 }
                 else
-                    ctx.lineTo(nextNode.x * scale, nextNode.y * scale);
+                    line.graphics.lineTo(nextNode.x * scale, nextNode.y * scale);
             }
         }
+        line.graphics.endStroke();
+        stage.update();
 
-        if (dotted === true) 
-            ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.stroke();
+        var brightColor = this._increaseBrightness(color, 30);
+
+        line.addEventListener("mouseover", function() {
+            line.alpha *= .80;
+            fillCommand.style = brightColor;
+            // console.log('circle: ', circle);
+            //TODO metti tutti gli altri in grigetto!!!
+
+
+            stage.update();
+         });
+
+         line.addEventListener("mouseout", function() {
+             line.alpha = 1;
+             fillCommand.style = color;
+
+             //Ripristina colore
+
+             stage.update();
+          });
+
+        /*if (dotted === true)
+            graphics.setLineDash([5, 5]);*/
+        //graphics.stroke();
 
         ctx = this._getCanvasLayer(el, true);
         for (node = 0; node < nodes.length; node++) {
             if (textClass != false)
                 this._drawMarker(el, ctx, scale, color, textClass, width, nodes[node], reverseMarkers);
         }
-
-
     },
     _drawMarker: function (el, ctx, scale, color, textClass, width, data, reverseMarkers) {
-
+        //width = width/2;
         if (data.label == "") return;
         if (data.marker == "") data.marker = "station";
 
@@ -361,14 +402,25 @@ THE SOFTWARE.
         // Render station and interchange icons
         ctx.strokeStyle = fgColor;
         ctx.fillStyle = bgColor;
-        ctx.beginPath();
+        //ctx.beginPath();
+
+
+        var shape = new createjs.Shape();
+        if(!this.stations) {
+          this.stations = []
+        }
+        this.stations.push(shape);
+        this.stage.addChild(shape);
+        shape.graphics.s(fgColor).f(bgColor);
+
         switch(data.marker.toLowerCase())
         {
             case "interchange":
             case "@interchange":
-                ctx.lineWidth = width;
+                //ctx.lineWidth = width;
+                shape.graphics.ss(width/4)
                 if (data.markerInfo == "")
-                    ctx.arc(x, y, width * 0.7, 0, Math.PI * 2, true);
+                    shape.graphics.arc(x, y, width * 0.7, 0, Math.PI * 2, true);
                 else
                 {
                     var mDir = data.markerInfo.substr(0,1).toLowerCase();
@@ -377,28 +429,31 @@ THE SOFTWARE.
                     {
                         if (mDir == "v")
                         {
-                            ctx.arc(x, y, width * 0.7,290 * Math.PI/180, 250 * Math.PI/180, false);
-                            ctx.arc(x, y-(width*mSize), width * 0.7,110 * Math.PI/180, 70 * Math.PI/180, false);
+                            shape.graphics.arc(x, y, width * 0.7,290 * Math.PI/180, 250 * Math.PI/180, false);
+                            shape.graphics.arc(x, y-(width*mSize), width * 0.7,110 * Math.PI/180, 70 * Math.PI/180, false);
                         }
                         else
                         {
-                            ctx.arc(x, y, width * 0.7,20 * Math.PI/180, 340 * Math.PI/180, false);
-                            ctx.arc(x+(width*mSize), y, width * 0.7,200 * Math.PI/180, 160 * Math.PI/180, false);
+                            shape.graphics.arc(x, y, width * 0.7,20 * Math.PI/180, 340 * Math.PI/180, false);
+                            shape.graphics.arc(x+(width*mSize), y, width * 0.7,200 * Math.PI/180, 160 * Math.PI/180, false);
                         }
                     }
                     else
-                        ctx.arc(x, y, width * 0.7, 0, Math.PI * 2, true);
+                        shape.graphics.arc(x, y, width * 0.7, 0, Math.PI * 2, true);
                 }
                 break;
             case "station":
             case "@station":
-                ctx.lineWidth = width/2;
-                ctx.arc(x, y, width/2, 0, Math.PI * 2, true);
+                //shape.graphics.lineWidth = width/2;
+                shape.graphics.ss(width/4)
+                shape.graphics.arc(x, y, width/2, 0, Math.PI * 2, true);
                 break;
         }
-        ctx.closePath();
+        /* ctx.closePath();
         ctx.stroke();
-        ctx.fill();
+        ctx.fill(); */
+        shape.graphics.endStroke();
+        this.stage.update();
 
         // Render text labels and hyperlinks
         var pos = "";
@@ -445,6 +500,14 @@ THE SOFTWARE.
             $("<span " + style + ">" + data.label.replace(/\\n/g,"<br />") + "</span>").appendTo(el);
 
     },
+    _updateStationsPositions: function() {
+      //console.log('Aggiorno le stazioni');
+      this.stations.forEach((item, i) => {
+        this.stage.setChildIndex( item, this.stage.getNumChildren()-1);
+      }, this);
+
+      this.stage.update();
+    },
     _drawGrid: function (el, scale, gridNumbers) {
 
         var ctx = this._getCanvasLayer(el, false);
@@ -481,7 +544,26 @@ THE SOFTWARE.
         ctx.fill();
         ctx.closePath();
 
+    },
+    _increaseBrightness: function (hex, percent){
+        // strip the leading # if it's there
+        hex = hex.replace(/^\s*#|\s*$/g, '');
+
+        // convert 3 char codes --> 6, e.g. `E0F` --> `EE00FF`
+        if(hex.length == 3){
+            hex = hex.replace(/(.)/g, '$1$1');
+        }
+
+        var r = parseInt(hex.substr(0, 2), 16),
+            g = parseInt(hex.substr(2, 2), 16),
+            b = parseInt(hex.substr(4, 2), 16);
+
+        return '#' +
+           ((0|(1<<8) + r + (256 - r) * percent / 100).toString(16)).substr(1) +
+           ((0|(1<<8) + g + (256 - g) * percent / 100).toString(16)).substr(1) +
+           ((0|(1<<8) + b + (256 - b) * percent / 100).toString(16)).substr(1);
     }
+
 };
 
 var methods = {

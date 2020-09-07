@@ -352,12 +352,32 @@ THE SOFTWARE.
 
         var brightColor = this._increaseBrightness(color, 30);
 
+
+
+        /*if (dotted === true)
+            graphics.setLineDash([5, 5]);*/
+        //graphics.stroke();
+        var connectedShapes = [];
+        ctx = this._getCanvasLayer(el, true);
+        for (node = 0; node < nodes.length; node++) {
+            if (textClass != false)
+                connectedShapes.push(this._drawMarker(el, ctx, scale, color, textClass, width, nodes[node], reverseMarkers));
+        }
+
+
         line.addEventListener("mouseover", function() {
             line.alpha *= .80;
             fillCommand.style = brightColor;
-            // console.log('circle: ', circle);
-            //TODO metti tutti gli altri in grigetto!!!
-
+            console.log("Ingrandire!", connectedShapes);
+            connectedShapes.forEach((item, i) => {
+              if(item) {
+                // item.label.css('font-weight', 'bold');
+                // item.label.css('font-size', '9pt');
+                item.label.addClass('line-selected');
+                /*item.scaleX = 1.2;
+                item.scaleY = 1.2;*/
+              }
+            });
 
             stage.update();
          });
@@ -365,21 +385,18 @@ THE SOFTWARE.
          line.addEventListener("mouseout", function() {
              line.alpha = 1;
              fillCommand.style = color;
-
-             //Ripristina colore
-
+             console.log("Ripristinare!", connectedShapes);
+             connectedShapes.forEach((item, i) => {
+               if(item) {
+                 // item.label.css('font-weight', 'normal');
+                 // item.label.css('font-size', '8pt');
+                 item.label.removeClass('line-selected');
+                 /*item.scaleX = 1;
+                 item.scaleY = 1;*/
+               }
+             });
              stage.update();
           });
-
-        /*if (dotted === true)
-            graphics.setLineDash([5, 5]);*/
-        //graphics.stroke();
-
-        ctx = this._getCanvasLayer(el, true);
-        for (node = 0; node < nodes.length; node++) {
-            if (textClass != false)
-                this._drawMarker(el, ctx, scale, color, textClass, width, nodes[node], reverseMarkers);
-        }
     },
     _drawMarker: function (el, ctx, scale, color, textClass, width, data, reverseMarkers) {
         //width = width/2;
@@ -447,6 +464,8 @@ THE SOFTWARE.
                 //shape.graphics.lineWidth = width/2;
                 shape.graphics.ss(width/4)
                 shape.graphics.arc(x, y, width/2, 0, Math.PI * 2, true);
+                //shape.regX = x + width/2;
+                //shape.regY = y + width/2;
                 break;
         }
         /* ctx.closePath();
@@ -493,12 +512,14 @@ THE SOFTWARE.
                 topOffset = offset;
                 break;
         }
+        var stationElement = null;
         var style = (textClass != "" ? "class='" + textClass + "' " : "") + "style='" + (textClass == "" ? "font-size:8pt;font-family:Verdana,Arial,Helvetica,Sans Serif;text-decoration:none;" : "") + "width:100px;" + (pos != "" ? pos : "") + ";position:absolute;top:" + (y + el.position().top - (topOffset > 0 ? topOffset : 0)) + "px;left:" + (x + el.position().left) + "px;z-index:3000;'";
         if (data.link != "")
-            $("<a " + style + " title='" + data.title.replace(/\\n/g,"<br />") + "' href='" + data.link + "' target='_new'>" + data.label.replace(/\\n/g,"<br />") + "</span>").appendTo(el);
+            stationElement = "<a " + style + " title='" + data.title.replace(/\\n/g,"<br />") + "' href='" + data.link + "' target='_new'>" + data.label.replace(/\\n/g,"<br />") + "</span>";
         else
-            $("<span " + style + ">" + data.label.replace(/\\n/g,"<br />") + "</span>").appendTo(el);
+            stationElement = "<span " + style + ">" + data.label.replace(/\\n/g,"<br />") + "</span>";
 
+        return {shape: shape, label: $(stationElement).appendTo(el)};
     },
     _updateStationsPositions: function() {
       //console.log('Aggiorno le stazioni');
